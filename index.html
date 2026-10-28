@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Перекличка личного состава</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e6f5c">
+<link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --bg: #f4f6f8;
+    --panel: #ffffff;
+    --panel-2: #eef1f4;
+    --line: #d7dde3;
+    --text: #1c2733;
+    --text-dim: #64707c;
+    --accent: #1e6f5c;
+    --accent-dim: #dceee8;
+    --accent-strong: #14503f;
+    --ok: #1e8e3e;
+    --ok-dim: #e3f5e9;
+    --absent: #c0392b;
+    --absent-dim: #fbe6e3;
+    --radius: 10px;
+    --mono: 'JetBrains Mono', 'Consolas', monospace;
+    --sans: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{
+    margin:0; padding:0; height:100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    overflow: hidden;
+    user-select: none;
+  }
+  #app{ display:flex; flex-direction:column; height:100vh; }
+
+  /* ===== HEADER ===== */
+  header{
+    background: var(--panel);
+    border-bottom: 2px solid var(--line);
+    padding: 10px 16px;
+    display:flex; align-items:center; gap:14px;
+    flex-wrap: wrap;
+  }
+  .title-block{ display:flex; flex-direction:column; margin-right:auto; }
+  .title-block h1{
+    font-size: 13px; margin:0; letter-spacing:0.10em; text-transform:uppercase;
+    color: var(--text-dim); font-weight:700;
+  }
+  .title-block .org-name{ font-size:18px; font-weight:800; color:var(--accent-strong); }
+
+  .date-nav{ display:flex; align-items:center; gap:8px; background:var(--panel-2); border:1px solid var(--line); border-radius: var(--radius); padding:6px 8px; }
+  .date-nav button{
+    width:36px; height:36px; border-radius:8px; border:1px solid var(--line); background:var(--panel);
+    color:var(--text); font-size:18px; font-weight:700; cursor:pointer;
+  }
+  .date-nav button:active{ background: var(--accent-dim); }
+  .date-input{
+    background:transparent; border:none; color:var(--text); font-size:16px; font-weight:700;
+    font-family: var(--mono); padding:4px; text-align:center; width:150px;
+  }
+
+  .header-actions{ display:flex; gap:8px; }
+  .btn{
+    border:1px solid var(--line); background:var(--panel); color:var(--text);
+    padding:9px 14px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;
+    white-space:nowrap;
+  }
+  .btn:active{ background: var(--panel-2); }
+  .btn.primary{ background: var(--accent); border-color:var(--accent); color:#ffffff; }
+  .btn.danger{ border-color: var(--absent); color: var(--absent); background:#fff; }
+
+  /* ===== TABS ===== */
+  nav.tabs{ display:flex; background: var(--panel); border-bottom:1px solid var(--line); }
+  nav.tabs button{
+    flex:1; padding:12px 8px; background:none; border:none; color:var(--text-dim);
+    font-size:14px; font-weight:700; letter-spacing:0.03em; cursor:pointer;
+    border-bottom:3px solid transparent;
+  }
+  nav.tabs button.active{ color:var(--accent-strong); border-bottom-color: var(--accent); }
+
+  /* ===== MAIN ===== */
+  main{ flex:1; overflow:hidden; position:relative; }
+  .view{ position:absolute; inset:0; overflow-y:auto; -webkit-overflow-scrolling:touch; display:none; }
+  .view.active{ display:block; }
+
+  /* summary strip */
+  .summary-strip{
+    display:flex; gap:10px; padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--line);
+    overflow-x:auto;
+  }
+  .sum-card{
+    flex: 0 0 auto; min-width:78px; background:var(--panel-2); border-radius:8px; padding:8px 12px;
+    text-align:center; border:1px solid var(--line);
+  }
+  .sum-card .n{ font-size:20px; font-weight:800; font-family:var(--mono); }
+  .sum-card .l{ font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em; margin-top:2px; }
+  .sum-card.total .n{ color: var(--text); }
+  .sum-card.present .n{ color: var(--ok); }
+  .sum-card.absent .n{ color: var(--absent); }
+
+  .pdf-bar{ display:flex; justify-content:flex-end; padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--line); gap:8px; align-items:center; flex-wrap:wrap; }
+
+  /* roster table */
+  table.roster{ width:100%; border-collapse:collapse; }
+  table.roster thead th{
+    position:sticky; top:0; background:var(--panel-2); z-index:5;
+    text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.06em;
+    color:var(--text-dim); padding:10px 8px; border-bottom:1px solid var(--line);
+  }
+  table.roster thead th.col-num{ width:44px; text-align:center; }
+  table.roster thead th.col-status{ width:110px; text-align:center; }
+  table.roster tbody tr{ border-bottom:1px solid var(--line); }
+  table.roster tbody tr.row-present{ background: #f1faf4; }
+  table.roster tbody tr.row-absent{ background: #fdf2f1; }
+  table.roster tbody tr:active{ background: var(--panel-2); }
+  table.roster td{ padding:12px 8px; font-size:15px; vertical-align:middle; }
+  td.col-num{ text-align:center; color:var(--text-dim); font-family:var(--mono); font-size:14px; }
+  td.col-rank{ color:var(--text-dim); font-size:13px; }
+  td.col-name{ font-weight:600; }
+  td.col-status{ text-align:center; }
+
+  .status-pill{
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:42px; height:32px; padding:0 10px; border-radius:16px;
+    font-family:var(--mono); font-weight:800; font-size:14px;
+    border:1.5px solid var(--line); color:var(--text-dim); background:var(--panel-2);
+  }
+  .status-pill.present{ background: var(--ok-dim); border-color: var(--ok); color:#0f5c26; }
+  .status-pill.absent{ background: var(--absent-dim); border-color: var(--absent); color:#8a281c; }
+  .status-pill.none{ background:var(--panel-2); color: var(--text-dim); }
+
+  /* status picker sheet */
+  #statusSheet{
+    position:fixed; inset:0; background:rgba(20,30,40,0.45); display:none; align-items:flex-end; z-index:100;
+  }
+  #statusSheet.open{ display:flex; }
+  .sheet-body{
+    background: var(--panel); width:100%; border-radius:16px 16px 0 0; padding:16px;
+    max-height:70vh; overflow-y:auto; border-top:2px solid var(--line);
+  }
+  .sheet-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .sheet-header .who{ font-size:17px; font-weight:800; }
+  .sheet-header .rank{ font-size:12px; color:var(--text-dim); }
+  .sheet-close{ background:var(--panel-2); border:1px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:8px; font-size:18px; }
+  .status-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
+  .status-opt{
+    border:1.5px solid var(--line); background:var(--panel-2); color:var(--text); border-radius:10px;
+    padding:14px 6px; font-size:13px; font-weight:700; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:4px;
+  }
+  .status-opt .code{ font-family:var(--mono); font-size:16px; font-weight:800; }
+  .status-opt.present{ border-color: var(--ok); }
+  .status-opt.absent-type{ border-color: var(--absent); }
+  .status-opt:active{ background: var(--panel); }
+  .status-opt.selected{ background: var(--accent-dim); border-color: var(--accent); }
+
+  /* ===== BASE (roster edit) view ===== */
+  .base-toolbar{ display:flex; gap:8px; padding:12px 14px; background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .base-form{ display:grid; grid-template-columns: 90px 120px 1.6fr auto auto; gap:8px; padding:14px; background:var(--panel-2); margin:14px; border-radius:10px; border:1px solid var(--line); align-items:center; }
+  .base-form input, .base-form select{
+    background: var(--panel); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:10px; font-size:14px;
+  }
+  .base-form label.chk{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-dim); white-space:nowrap; }
+  table.base-table{ width:100%; border-collapse:collapse; margin:0 0 20px 0; }
+  table.base-table th{ text-align:left; font-size:11px; text-transform:uppercase; color:var(--text-dim); padding:8px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); }
+  table.base-table td{ padding:10px 8px; border-bottom:1px solid var(--line); font-size:14px; }
+  table.base-table input, table.base-table select{ width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text); border-radius:6px; padding:8px; font-size:14px; }
+  .row-del{ background:none; border:none; color:var(--absent); font-size:20px; padding:4px 8px; cursor:pointer; }
+  .commander-badge{ display:inline-block; background:var(--accent); color:#fff; font-size:10px; font-weight:800; padding:2px 6px; border-radius:5px; margin-left:6px; vertical-align:middle; }
+  .cmd-check{ width:20px; height:20px; }
+
+  /* ===== HISTORY view ===== */
+  .history-list{ padding:14px; display:flex; flex-direction:column; gap:8px; }
+  .history-item{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px;
+    display:flex; justify-content:space-between; align-items:center; cursor:pointer;
+  }
+  .history-item .d{ font-weight:700; font-family:var(--mono); color: var(--accent-strong); }
+  .history-item .stats{ font-size:12px; color:var(--text-dim); }
+  .empty-state{ text-align:center; padding:60px 20px; color:var(--text-dim); }
+  .empty-state .big{ font-size:40px; margin-bottom:10px; }
+
+  /* toast */
+  #toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(20px);
+    background: var(--text); border:1px solid var(--line); color:#fff; padding:10px 20px;
+    border-radius:10px; font-size:14px; opacity:0; pointer-events:none; transition: all 0.25s ease; z-index:200;
+  }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  ::-webkit-scrollbar{ width:6px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:3px; }
+
+  /* ===================================================================
+     PRINT / PDF SHEET
+     Rendered hidden in normal view; shown full-page only when printing.
+     Sized to exactly half of A4 (A4 height / 2), so that printing the
+     whole page at A4 with standard margins places this content on the
+     top half of the sheet, matching the physical form.
+  =================================================================== */
+  #printSheet{ display:none; }
+
+  @media print{
+    body *{ visibility:hidden; }
+    #printSheet, #printSheet *{ visibility:visible; }
+    #printSheet{
+      display:block;
+      position:absolute; top:0; left:0;
+      width:100%;
+    }
+    @page{ size: A4 portrait; margin: 12mm; }
+  }
+
+  .ps-wrap{
+    font-family: 'Times New Roman', Times, serif;
+    font-size: 12pt;
+    color:#000;
+    width:100%;
+    /* half of an A4 printable area (A4 = 297mm tall, minus 2x12mm margins = 273mm; half = ~130mm, with a small safety margin) */
+    max-height: 130mm;
+    overflow:hidden;
+  }
+  .ps-header{ text-align:center; font-size:12pt; font-weight:400; margin:0 0 2mm 0; }
+  .ps-title{ text-align:center; font-size:12pt; font-weight:700; margin:0 0 3mm 0; }
+  table.ps-table{ width:100%; border-collapse:collapse; font-size:12pt; }
+  table.ps-table th, table.ps-table td{
+    border:1px solid #000; padding:1mm 2mm; text-align:center; font-size:12pt;
+  }
+  table.ps-table th{ font-weight:700; }
+  table.ps-table td.ps-label{ text-align:left; font-weight:400; }
+  table.ps-table tr.ps-toprow td{ font-weight:700; }
+
+  .ps-signblock{ margin-top:6mm; font-size:12pt; text-align:center; }
+  .ps-sign-inner{ display:inline-table; border-collapse:collapse; border:none; }
+  .ps-sign-inner td{ border:none; padding:0; }
+  .ps-cmd-row td{ text-align:center; font-weight:700; white-space:nowrap; padding-bottom:5mm; }
+  .ps-rank-row td{ text-align:left; white-space:nowrap; padding-bottom:8mm; }
+  .ps-name-row td{ text-align:right; white-space:nowrap; }
+  .ps-date-line{ margin-top:4mm; text-align:left; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="title-block">
+      <h1>Перекличка личного состава</h1>
+      <div class="org-name" id="orgLabel">61917 в/ч VE(JTV)</div>
+    </div>
+    <div class="date-nav">
+      <button id="prevDay">‹</button>
+      <input type="date" id="dateInput" class="date-input">
+      <button id="nextDay">›</button>
+    </div>
+    <div class="header-actions">
+      <button class="btn" id="todayBtn">Сегодня</button>
+      <button class="btn danger" id="resetDayBtn">Сброс дня</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button data-view="perekличка" class="active">ПЕРЕКЛИЧКА</button>
+    <button data-view="history">ИСТОРИЯ</button>
+    <button data-view="base">БАЗА</button>
+  </nav>
+
+  <main>
+    <!-- ROLL CALL VIEW -->
+    <div class="view active" id="view-perekличка">
+      <div class="summary-strip" id="summaryStrip"></div>
+      <div class="pdf-bar">
+        <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-dim);">
+          Командир:
+          <select id="commanderSelect" style="border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-size:13px;"></select>
+        </label>
+        <button class="btn primary" id="makePdfBtn">Сформировать PDF (ROʻYXATI)</button>
+      </div>
+      <table class="roster">
+        <thead>
+          <tr>
+            <th class="col-num">№</th>
+            <th>Звание</th>
+            <th>ФИО</th>
+            <th class="col-status">Статус</th>
+          </tr>
+        </thead>
+        <tbody id="rosterBody"></tbody>
+      </table>
+    </div>
+
+    <!-- HISTORY VIEW -->
+    <div class="view" id="view-history">
+      <div class="history-list" id="historyList"></div>
+    </div>
+
+    <!-- BASE (roster management) VIEW -->
+    <div class="view" id="view-base">
+      <div class="base-toolbar">
+        <button class="btn primary" id="addEmployeeBtn">+ Добавить сотрудника</button>
+        <button class="btn danger" id="clearAllBtn">Удалить всех</button>
+      </div>
+      <div id="addForm" class="base-form" style="display:none;">
+        <input type="text" id="newRank" placeholder="Звание">
+        <select id="newCategory">
+          <option value="ofitser">Офицер</option>
+          <option value="serjant">Сержант</option>
+        </select>
+        <input type="text" id="newName" placeholder="ФИО">
+        <label class="chk"><input type="checkbox" id="newIsCommander" class="cmd-check"> Командир</label>
+        <label class="chk"><input type="checkbox" id="newIsLmvb" class="cmd-check"> LMVB</label>
+      </div>
+      <div style="padding:0 14px 4px;">
+        <button class="btn primary" id="saveNewEmployee" style="margin-bottom:10px;">Сохранить нового сотрудника</button>
+      </div>
+      <div style="padding:0 14px;">
+        <table class="base-table">
+          <thead><tr><th style="width:40px;">№</th><th>Звание</th><th style="width:110px;">Категория</th><th>ФИО</th><th style="width:70px;">Команд.</th><th style="width:60px;">LMVB</th><th style="width:44px;"></th></tr></thead>
+          <tbody id="baseBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- STATUS PICKER SHEET -->
+<div id="statusSheet">
+  <div class="sheet-body">
+    <div class="sheet-header">
+      <div>
+        <div class="who" id="sheetWho">—</div>
+        <div class="rank" id="sheetRank">—</div>
+      </div>
+      <button class="sheet-close" id="sheetClose">✕</button>
+    </div>
+    <div class="status-grid" id="statusGrid"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ============ PRINT SHEET (used only for PDF/print) ============ -->
+<div id="printSheet">
+  <div class="ps-wrap">
+    <div class="ps-header" id="psHeader">2026-yil 20.07 kuniga 61917 harbiy qism VE(JTV) shaxsiy tarkibining safdagi</div>
+    <div class="ps-title">ROʻYXATI</div>
+    <table class="ps-table" id="psTable"></table>
+    <div class="ps-signblock">
+      <table class="ps-sign-inner">
+        <tr class="ps-cmd-row"><td id="psCmdLine">61917 HARBIY QISM VE(JTV) KOMANDIRI</td></tr>
+        <tr class="ps-rank-row"><td id="psRankLeft">podpolkovnik</td></tr>
+        <tr class="ps-name-row"><td id="psRankRight">R.BOTASHEV</td></tr>
+      </table>
+      <div class="ps-date-line" id="psDateLine">20.07.2026-yil</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- CONFIG ----------
+  const STATUS_TYPES = [
+    { code: 'V',  label: 'Присутствует', className: 'present', isPresent: true },
+    { code: 'N',  label: "Naryad",       className: 'absent-type' },
+    { code: 'T',  label: "Ta'til",       className: 'absent-type' },
+    { code: 'XS', label: "Xizmat safari",className: 'absent-type' },
+    { code: 'JN', label: "Jang. navb.",  className: 'absent-type' },
+    { code: 'O',  label: "O'qish",       className: 'absent-type' },
+    { code: 'G',  label: "Gosp.",        className: 'absent-type' },
+    { code: 'PR', label: "Parvoz rej.",  className: 'absent-type' },
+    { code: 'TD', label: "Tadbir",       className: 'absent-type' },
+    { code: '-',  label: "Без причины",  className: 'absent-type' }
+  ];
+  const STATUS_LOOKUP = Object.fromEntries(STATUS_TYPES.map(s => [s.code, s]));
+
+  // Mapping from in-app status codes to the printed form's row labels (blank-matched)
+  const PDF_ROW_MAP = [
+    { code: 'N',  label: "Naryadda" },
+    { code: 'T',  label: "Ta'tilda" },
+    { code: 'XS', label: "Xizmat safarida" },
+    { code: 'JN', label: "Jangovar navbatchilikda" },
+    { code: 'O',  label: "O'qishda" },
+    { code: 'G',  label: "Gospitalda(kasal,tibb.punkti)" },
+    { code: 'PR', label: "Uchish rejasi boʻyicha" },
+    { code: 'TD', label: "Tadbir" },
+    { code: '-',  label: "Safga kelmaganlar" }
+  ];
+
+  const LS_ROSTER = 'pereklichka_roster_v2';
+  const LS_RECORDS_PREFIX = 'pereklichka_day_'; // + YYYY-MM-DD
+
+  // ---------- STATE ----------
+  let roster = [];       // [{id, rank, name, category:'ofitser'|'serjant', isCommander:bool, isLmvb:bool}]
+  let currentDate = todayStr();
+  let dayRecords = {};   // { employeeId: statusCode }
+
+  function todayStr(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  // ---------- PERSISTENCE ----------
+  function loadRoster(){
+    const raw = localStorage.getItem(LS_ROSTER);
+    if(raw){
+      try{
+        roster = JSON.parse(raw);
+        roster.forEach(e => {
+          if(!e.category) e.category = 'serjant';
+          if(typeof e.isCommander !== 'boolean') e.isCommander = false;
+          if(typeof e.isLmvb !== 'boolean') e.isLmvb = false;
+        });
+        return;
+      }catch(e){}
+    }
+    roster = [];
+  }
+  function saveRoster(){
+    localStorage.setItem(LS_ROSTER, JSON.stringify(roster));
+  }
+  function loadDay(dateStr){
+    const raw = localStorage.getItem(LS_RECORDS_PREFIX + dateStr);
+    if(raw){
+      try{ return JSON.parse(raw); }catch(e){ return {}; }
+    }
+    return {};
+  }
+  function saveDay(dateStr, records){
+    localStorage.setItem(LS_RECORDS_PREFIX + dateStr, JSON.stringify(records));
+  }
+  function listAllDayKeys(){
+    const keys = [];
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(k && k.startsWith(LS_RECORDS_PREFIX)){
+        keys.push(k.substring(LS_RECORDS_PREFIX.length));
+      }
+    }
+    return keys.sort().reverse();
+  }
+
+  // ---------- TOAST ----------
+  let toastTimer = null;
+  function toast(msg){
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=> el.classList.remove('show'), 1600);
+  }
+
+  // ---------- RENDER: ROLL CALL ----------
+  function renderRoster(){
+    const body = document.getElementById('rosterBody');
+    if(roster.length === 0){
+      body.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:40px; color:var(--text-dim);">Список пуст. Добавьте сотрудников во вкладке БАЗА.</td></tr>';
+      renderSummary();
+      return;
+    }
+    let html = '';
+    roster.forEach((emp, idx) => {
+      const code = dayRecords[emp.id];
+      const st = code ? STATUS_LOOKUP[code] : null;
+      let rowClass = '';
+      let pillHtml = '<span class="status-pill none">—</span>';
+      if(st){
+        if(st.isPresent){
+          rowClass = 'row-present';
+          pillHtml = '<span class="status-pill present">✓</span>';
+        } else {
+          rowClass = 'row-absent';
+          pillHtml = '<span class="status-pill absent">'+ escapeHtml(st.code) +'</span>';
+        }
+      }
+      html += '<tr class="'+rowClass+'" data-id="'+emp.id+'">'
+        + '<td class="col-num">'+ (idx+1) +'</td>'
+        + '<td class="col-rank">'+ escapeHtml(emp.rank||'') +'</td>'
+        + '<td class="col-name">'+ escapeHtml(emp.name||'') + (emp.isCommander ? '<span class="commander-badge">КМД</span>' : '') +'</td>'
+        + '<td class="col-status">'+ pillHtml +'</td>'
+        + '</tr>';
+    });
+    body.innerHTML = html;
+  }
+
+  function computeStats(){
+    function catSplit(filterFn){
+      let ofitser = 0, serjant = 0;
+      roster.forEach(emp => {
+        if(!filterFn(emp)) return;
+        if(emp.category === 'ofitser') ofitser++; else serjant++;
+      });
+      return { ofitser, serjant, jami: ofitser + serjant };
+    }
+    const shtat = catSplit(()=>true);
+    const royxat = catSplit(()=>true);
+    const safda = catSplit(emp => {
+      const code = dayRecords[emp.id];
+      return code && STATUS_LOOKUP[code] && STATUS_LOOKUP[code].isPresent;
+    });
+    const perCode = {};
+    PDF_ROW_MAP.forEach(row => {
+      perCode[row.code] = catSplit(emp => dayRecords[emp.id] === row.code);
+    });
+    return { shtat, royxat, safda, perCode };
+  }
+
+  function renderSummary(){
+    const total = roster.length;
+    let present = 0, absent = 0;
+    const absentByCode = {};
+    roster.forEach(emp => {
+      const code = dayRecords[emp.id];
+      if(!code) return;
+      const st = STATUS_LOOKUP[code];
+      if(!st) return;
+      if(st.isPresent) present++;
+      else {
+        absent++;
+        absentByCode[code] = (absentByCode[code]||0) + 1;
+      }
+    });
+    const marked = present + absent;
+    let html = '';
+    html += cardHtml(total, 'Всего', 'total');
+    html += cardHtml(present, 'В строю', 'present');
+    html += cardHtml(absent, 'Отсутств.', 'absent');
+    html += cardHtml(total - marked, 'Не отмечено', '');
+    STATUS_TYPES.filter(s=>!s.isPresent).forEach(s=>{
+      const n = absentByCode[s.code] || 0;
+      if(n > 0){
+        html += cardHtml(n, s.label, '');
+      }
+    });
+    document.getElementById('summaryStrip').innerHTML = html;
+  }
+
+  function cardHtml(n, label, cls){
+    return '<div class="sum-card '+cls+'"><div class="n">'+n+'</div><div class="l">'+escapeHtml(label)+'</div></div>';
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ---------- STATUS SHEET ----------
+  let activeEmployeeId = null;
+  function openStatusSheet(empId){
+    const emp = roster.find(e => e.id === empId);
+    if(!emp) return;
+    activeEmployeeId = empId;
+    document.getElementById('sheetWho').textContent = emp.name;
+    document.getElementById('sheetRank').textContent = emp.rank || '';
+    const currentCode = dayRecords[empId];
+    const grid = document.getElementById('statusGrid');
+    grid.innerHTML = STATUS_TYPES.map(s => {
+      const sel = s.code === currentCode ? ' selected' : '';
+      return '<button class="status-opt '+s.className+sel+'" data-code="'+s.code+'">'
+        + '<span class="code">'+escapeHtml(s.code)+'</span>'
+        + '<span class="lbl">'+escapeHtml(s.label)+'</span>'
+        + '</button>';
+    }).join('');
+    document.getElementById('statusSheet').classList.add('open');
+  }
+  function closeStatusSheet(){
+    document.getElementById('statusSheet').classList.remove('open');
+    activeEmployeeId = null;
+  }
+
+  document.getElementById('statusGrid').addEventListener('click', function(e){
+    const btn = e.target.closest('.status-opt');
+    if(!btn || !activeEmployeeId) return;
+    const code = btn.dataset.code;
+    if(dayRecords[activeEmployeeId] === code){
+      delete dayRecords[activeEmployeeId];
+    } else {
+      dayRecords[activeEmployeeId] = code;
+    }
+    saveDay(currentDate, dayRecords);
+    renderRoster();
+    renderSummary();
+    closeStatusSheet();
+  });
+  document.getElementById('sheetClose').addEventListener('click', closeStatusSheet);
+  document.getElementById('statusSheet').addEventListener('click', function(e){
+    if(e.target.id === 'statusSheet') closeStatusSheet();
+  });
+
+  document.getElementById('rosterBody').addEventListener('click', function(e){
+    const tr = e.target.closest('tr[data-id]');
+    if(!tr) return;
+    openStatusSheet(tr.dataset.id);
+  });
+
+  // ---------- DATE NAVIGATION ----------
+  function setDate(dateStr){
+    currentDate = dateStr;
+    document.getElementById('dateInput').value = dateStr;
+    dayRecords = loadDay(dateStr);
+    renderRoster();
+    renderSummary();
+  }
+  document.getElementById('dateInput').addEventListener('change', function(e){
+    setDate(e.target.value);
+  });
+  document.getElementById('prevDay').addEventListener('click', function(){
+    const d = new Date(currentDate + 'T00:00:00');
+    d.setDate(d.getDate()-1);
+    setDate(toISO(d));
+  });
+  document.getElementById('nextDay').addEventListener('click', function(){
+    const d = new Date(currentDate + 'T00:00:00');
+    d.setDate(d.getDate()+1);
+    setDate(toISO(d));
+  });
+  document.getElementById('todayBtn').addEventListener('click', function(){
+    setDate(todayStr());
+  });
+  function toISO(d){
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  document.getElementById('resetDayBtn').addEventListener('click', function(){
+    if(confirm('Сбросить все отметки за '+currentDate+'?')){
+      dayRecords = {};
+      saveDay(currentDate, dayRecords);
+      renderRoster();
+      renderSummary();
+      toast('День сброшен');
+    }
+  });
+
+  // ---------- TABS ----------
+  document.querySelectorAll('nav.tabs button').forEach(btn => {
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('view-'+btn.dataset.view).classList.add('active');
+      if(btn.dataset.view === 'history') renderHistory();
+      if(btn.dataset.view === 'base') renderBase();
+      if(btn.dataset.view === 'perekличка') renderCommanderSelect();
+    });
+  });
+
+  // ---------- HISTORY VIEW ----------
+  function renderHistory(){
+    const keys = listAllDayKeys();
+    const container = document.getElementById('historyList');
+    if(keys.length === 0){
+      container.innerHTML = '<div class="empty-state"><div class="big">🗂️</div>История пуста.<br>Отметьте статусы на вкладке ПЕРЕКЛИЧКА.</div>';
+      return;
+    }
+    let html = '';
+    keys.forEach(dateStr => {
+      const records = loadDay(dateStr);
+      let present = 0, absent = 0;
+      Object.values(records).forEach(code => {
+        const st = STATUS_LOOKUP[code];
+        if(!st) return;
+        if(st.isPresent) present++; else absent++;
+      });
+      html += '<div class="history-item" data-date="'+dateStr+'">'
+        + '<div><div class="d">'+formatDatePretty(dateStr)+'</div>'
+        + '<div class="stats">Всего: '+roster.length+' · В строю: '+present+' · Отсутств.: '+absent+'</div></div>'
+        + '<div style="color:var(--text-dim); font-size:20px;">›</div>'
+        + '</div>';
+    });
+    container.innerHTML = html;
+    container.querySelectorAll('.history-item').forEach(item => {
+      item.addEventListener('click', function(){
+        setDate(item.dataset.date);
+        document.querySelector('nav.tabs button[data-view="perekличка"]').click();
+      });
+    });
+  }
+  function formatDatePretty(dateStr){
+    const d = new Date(dateStr + 'T00:00:00');
+    const days = ['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота'];
+    return dateStr + '  ·  ' + days[d.getDay()];
+  }
+
+  // ---------- BASE (ROSTER MANAGEMENT) ----------
+  function renderBase(){
+    const body = document.getElementById('baseBody');
+    if(roster.length === 0){
+      body.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-dim);">Список пуст.</td></tr>';
+      return;
+    }
+    let html = '';
+    roster.forEach((emp, idx) => {
+      html += '<tr data-id="'+emp.id+'">'
+        + '<td>'+(idx+1)+'</td>'
+        + '<td><input type="text" class="edit-rank" value="'+escapeHtml(emp.rank||'')+'"></td>'
+        + '<td><select class="edit-category">'
+          + '<option value="ofitser"'+(emp.category==='ofitser'?' selected':'')+'>Офицер</option>'
+          + '<option value="serjant"'+(emp.category==='serjant'?' selected':'')+'>Сержант</option>'
+          + '</select></td>'
+        + '<td><input type="text" class="edit-name" value="'+escapeHtml(emp.name||'')+'"></td>'
+        + '<td style="text-align:center;"><input type="checkbox" class="edit-commander cmd-check" '+(emp.isCommander?'checked':'')+'></td>'
+        + '<td style="text-align:center;"><input type="checkbox" class="edit-lmvb cmd-check" '+(emp.isLmvb?'checked':'')+'></td>'
+        + '<td><button class="row-del">✕</button></td>'
+        + '</tr>';
+    });
+    body.innerHTML = html;
+
+    body.querySelectorAll('.edit-rank').forEach(inp => {
+      inp.addEventListener('change', function(){
+        const id = inp.closest('tr').dataset.id;
+        const emp = roster.find(e=>e.id===id);
+        if(emp){ emp.rank = inp.value; saveRoster(); }
+      });
+    });
+    body.querySelectorAll('.edit-category').forEach(sel => {
+      sel.addEventListener('change', function(){
+        const id = sel.closest('tr').dataset.id;
+        const emp = roster.find(e=>e.id===id);
+        if(emp){ emp.category = sel.value; saveRoster(); renderSummary(); }
+      });
+    });
+    body.querySelectorAll('.edit-name').forEach(inp => {
+      inp.addEventListener('change', function(){
+        const id = inp.closest('tr').dataset.id;
+        const emp = roster.find(e=>e.id===id);
+        if(emp){ emp.name = inp.value; saveRoster(); renderRoster(); }
+      });
+    });
+    body.querySelectorAll('.edit-commander').forEach(chk => {
+      chk.addEventListener('change', function(){
+        const id = chk.closest('tr').dataset.id;
+        const emp = roster.find(e=>e.id===id);
+        if(emp){ emp.isCommander = chk.checked; saveRoster(); renderRoster(); renderCommanderSelect(); }
+      });
+    });
+    body.querySelectorAll('.edit-lmvb').forEach(chk => {
+      chk.addEventListener('change', function(){
+        const id = chk.closest('tr').dataset.id;
+        const emp = roster.find(e=>e.id===id);
+        if(emp){ emp.isLmvb = chk.checked; saveRoster(); renderCommanderSelect(); }
+      });
+    });
+    body.querySelectorAll('.row-del').forEach(btn => {
+      btn.addEventListener('click', function(){
+        const id = btn.closest('tr').dataset.id;
+        const emp = roster.find(e=>e.id===id);
+        if(confirm('Удалить сотрудника "'+(emp?emp.name:'')+'"?')){
+          roster = roster.filter(e=>e.id!==id);
+          saveRoster();
+          renderBase();
+          renderRoster();
+          renderSummary();
+          renderCommanderSelect();
+        }
+      });
+    });
+  }
+
+  document.getElementById('addEmployeeBtn').addEventListener('click', function(){
+    const form = document.getElementById('addForm');
+    form.style.display = form.style.display === 'none' ? 'grid' : 'none';
+    document.getElementById('newRank').value = '';
+    document.getElementById('newName').value = '';
+    document.getElementById('newIsCommander').checked = false;
+    document.getElementById('newIsLmvb').checked = false;
+    document.getElementById('newRank').focus();
+  });
+  document.getElementById('saveNewEmployee').addEventListener('click', function(){
+    const rank = document.getElementById('newRank').value.trim();
+    const name = document.getElementById('newName').value.trim();
+    const category = document.getElementById('newCategory').value;
+    const isCommander = document.getElementById('newIsCommander').checked;
+    const isLmvb = document.getElementById('newIsLmvb').checked;
+    if(!name){ toast('Введите ФИО'); return; }
+    roster.push({ id: 'e' + Date.now() + Math.random().toString(36).slice(2,7), rank, name, category, isCommander, isLmvb });
+    saveRoster();
+    document.getElementById('addForm').style.display = 'none';
+    renderBase();
+    renderRoster();
+    renderSummary();
+    renderCommanderSelect();
+    toast('Сотрудник добавлен');
+  });
+  document.getElementById('clearAllBtn').addEventListener('click', function(){
+    if(roster.length === 0) return;
+    if(confirm('Удалить ВСЕХ сотрудников из списка? Это действие необратимо.')){
+      roster = [];
+      saveRoster();
+      renderBase();
+      renderRoster();
+      renderSummary();
+      renderCommanderSelect();
+      toast('Список очищен');
+    }
+  });
+
+  // ---------- COMMANDER SELECT ----------
+  function renderCommanderSelect(){
+    const sel = document.getElementById('commanderSelect');
+    const candidates = roster.filter(e => e.isCommander);
+    const prevValue = sel.value;
+    if(candidates.length === 0){
+      sel.innerHTML = '<option value="">— не выбран —</option>';
+      sel.disabled = true;
+      return;
+    }
+    sel.disabled = false;
+    sel.innerHTML = candidates.map(e =>
+      '<option value="'+e.id+'">'+escapeHtml(e.rank||'')+' '+escapeHtml(e.name)+(e.isLmvb?' (LMVB)':'')+'</option>'
+    ).join('');
+    if(candidates.some(c => c.id === prevValue)){
+      sel.value = prevValue;
+    } else {
+      sel.value = candidates[0].id;
+    }
+  }
+
+  // ---------- PDF / PRINT GENERATION ----------
+  function pad2(n){ return String(n).padStart(2,'0'); }
+
+  function buildPrintSheet(){
+    const d = new Date(currentDate + 'T00:00:00');
+    const yyyy = d.getFullYear(), dd = pad2(d.getDate()), mm = pad2(d.getMonth()+1);
+
+    document.getElementById('psHeader').textContent =
+      yyyy + '-yil ' + dd + '.' + mm + ' kuniga 61917 harbiy qism VE(JTV) shaxsiy tarkibining safdagi';
+
+    const stats = computeStats();
+
+    const rows = [];
+    rows.push({ label: "Shtat boʻyicha", data: stats.shtat, top:true });
+    rows.push({ label: "Roʻyxat boʻyicha", data: stats.royxat, top:true });
+    rows.push({ label: "Safda", data: stats.safda, top:true });
+    rows.push({ label: "Xizmat safarida", data: stats.perCode['XS'] });
+    rows.push({ label: "Ta'tilda", data: stats.perCode['T'] });
+    rows.push({ label: "Naryadda", data: stats.perCode['N'] });
+    rows.push({ label: "Jangovar navbatchilikda", data: stats.perCode['JN'] });
+    rows.push({ label: "O'qishda", data: stats.perCode['O'] });
+    rows.push({ label: "Gospitalda(kasal,tibb.punkti)", data: stats.perCode['G'] });
+    rows.push({ label: "Uchish rejasi boʻyicha", data: stats.perCode['PR'] });
+    rows.push({ label: "Tadbir", data: stats.perCode['TD'] });
+    rows.push({ label: "Safga kelmaganlar", data: stats.perCode['-'] });
+
+    let html = '<tr><th>Hisob turi</th><th>Ofitserlar</th><th>Serjantlar</th><th>Jami</th></tr>';
+    rows.forEach(r => {
+      html += '<tr'+(r.top?' class="ps-toprow"':'')+'>'
+        + '<td class="ps-label">'+escapeHtml(r.label)+'</td>'
+        + '<td>'+r.data.ofitser+'</td>'
+        + '<td>'+r.data.serjant+'</td>'
+        + '<td>'+r.data.jami+'</td>'
+        + '</tr>';
+    });
+    document.getElementById('psTable').innerHTML = html;
+
+    const selId = document.getElementById('commanderSelect').value;
+    const commander = roster.find(e => e.id === selId);
+    let cmdTitle = '61917 HARBIY QISM VE(JTV) KOMANDIRI';
+    let cmdRank = 'podpolkovnik';
+    let cmdName = 'R.BOTASHEV';
+    if(commander){
+      cmdRank = commander.rank || '';
+      cmdName = commander.name || '';
+      if(commander.isLmvb){
+        cmdTitle = cmdTitle + ' LMVB';
+      }
+    }
+    document.getElementById('psCmdLine').textContent = cmdTitle;
+    document.getElementById('psRankLeft').textContent = cmdRank;
+    document.getElementById('psRankRight').textContent = cmdName;
+    document.getElementById('psDateLine').textContent = dd + '.' + mm + '.' + yyyy + '-yil';
+  }
+
+  document.getElementById('makePdfBtn').addEventListener('click', function(){
+    if(roster.length === 0){
+      toast('Список пуст — нечего печатать');
+      return;
+    }
+    buildPrintSheet();
+    window.print();
+  });
+
+  // ---------- INIT ----------
+  loadRoster();
+  setDate(todayStr());
+  renderCommanderSelect();
+
+  // ---------- PWA: register service worker for offline use ----------
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('sw.js').catch(function(){ /* offline-first app still works without SW */ });
+    });
+  }
+
+})();
+</script>
+</body>
+</html>
